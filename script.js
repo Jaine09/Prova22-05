@@ -423,7 +423,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const logoutUserPorInatividade = () => {
             localStorage.removeItem('usuarioLogado'); 
             alert("Você foi desconectado por inatividade. Por favor, faça o login novamente.");
-            window.location.href = 'login.html'; // Corrigido para login.html
+            window.location.href = 'index.html'; // 
         };
 
         const resetInactivityTimer = () => {
