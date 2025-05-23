@@ -250,7 +250,40 @@ button[type="submit"]:active {
     padding: 30px 20px;
     background-color: #f4f7f6;
 }
+.weather-widget {
+    background-color: #eef5f9; /* Um azul bem claro e suave */
+    border-radius: 8px;
+    padding: 10px 15px;
+    margin: 10px 0 15px 0; /* Espaçamento antes do campo de endereço */
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 0.9em;
+    color: #334E68; /* Cor do texto mais escura para contraste */
+    border: 1px solid #c9dcec;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+}
 
+.weather-widget img#weatherIcon {
+    width: 40px; /* Tamanho do ícone */
+    height: 40px;
+}
+
+.weather-widget #weatherTemp {
+    font-size: 1.4em;
+    font-weight: bold;
+}
+
+.weather-widget #weatherCity {
+    font-weight: 500;
+}
+
+.weather-widget #weatherDescription {
+    font-size: 0.85em;
+    color: #587085;
+    font-style: italic;
+    margin-left: auto; /* Empurra para a direita, se houver espaço */
+}
 .admin-content-container {
     max-width: 1000px;
     margin: 0 auto;
