@@ -1,4 +1,6 @@
 document.addEventListener('DOMContentLoaded', () => {
+    const OPENWEATHERMAP_API_KEY = '639f302be83b9b35d9e5568d6833f6df'; // SUA CHAVE DA API AQUI!
+
     // --- LÓGICA DA PÁGINA DE CADASTRO DE USUÁRIO ---
     const cadastroForm = document.getElementById('cadastroForm');
     if (cadastroForm) {
@@ -9,44 +11,107 @@ document.addEventListener('DOMContentLoaded', () => {
         const senhaCadastroInput = document.getElementById('txtSenhaCadastro');
         const confirmarSenhaInput = document.getElementById('txtConfirmarSenha');
         const cadastroMessage = document.getElementById('cadastroMessage');
+        const weatherWidget = document.getElementById('weatherWidget');
 
-        if (cepInput) { // Verifica se o campo CEP existe para adicionar o listener
-            cepInput.addEventListener('blur', async () => {
+
+        if (cepInput) {
+            cepInput.addEventListener('input', (e) => { // Mudar para 'input' para formatar enquanto digita
+                let cepVal = e.target.value.replace(/\D/g, '');
+                if (cepVal.length > 8) cepVal = cepVal.substring(0, 8);
+                
+                let cepFormatado = cepVal;
+                if (cepVal.length > 5) {
+                    cepFormatado = cepVal.substring(0, 5) + '-' + cepVal.substring(5);
+                }
+                e.target.value = cepFormatado; // Atualiza o valor do campo com a formatação
+            });
+
+            cepInput.addEventListener('blur', async () => { // 'blur' para buscar após sair do campo
                 const cep = cepInput.value.replace(/\D/g, '');
+                if (weatherWidget) weatherWidget.style.display = 'none'; // Esconde widget ao buscar novo CEP
+
                 if (cep.length === 8) {
                     try {
                         const response = await fetch(`https://viacep.com.br/ws/${cep}/json/`);
-                        if (!response.ok) throw new Error('CEP não encontrado');
-                        const data = await response.json();
-                        if (data.erro) {
-                            throw new Error('CEP inválido ou não encontrado.');
+                        if (!response.ok) throw new Error('CEP não encontrado (ViaCEP)');
+                        const dataViaCEP = await response.json();
+                        if (dataViaCEP.erro) {
+                            throw new Error('CEP inválido ou não encontrado (ViaCEP).');
                         }
-                        enderecoInput.value = `${data.logradouro}, ${data.bairro}, ${data.localidade} - ${data.uf}`;
+                        enderecoInput.value = `${dataViaCEP.logradouro}, ${dataViaCEP.bairro}, ${dataViaCEP.localidade} - ${dataViaCEP.uf}`;
                         displayMessage(cadastroMessage, '');
+
+                        // Após buscar o CEP e preencher o endereço, buscar o clima
+                        if (dataViaCEP.localidade) {
+                            fetchWeatherData(dataViaCEP.localidade, dataViaCEP.uf); // Passa cidade e UF
+                        }
+
                     } catch (error) {
                         console.error('Erro ao buscar CEP:', error);
                         enderecoInput.value = '';
                         displayMessage(cadastroMessage, error.message || 'Erro ao buscar CEP. Verifique e tente novamente.', 'error');
                     }
-                } else if (cep.length > 0) {
+                } else if (cep.length > 0) { // Se o CEP não tem 8 dígitos mas tem algo
                     enderecoInput.value = '';
                     displayMessage(cadastroMessage, 'CEP deve conter 8 números.', 'error');
                 }
             });
         }
 
+        async function fetchWeatherData(cidade, uf) {
+            if (!weatherWidget) return;
+            const weatherIconEl = document.getElementById('weatherIcon');
+            const weatherTempEl = document.getElementById('weatherTemp');
+            const weatherCityEl = document.getElementById('weatherCity');
+            const weatherDescriptionEl = document.getElementById('weatherDescription');
+
+            // Tenta buscar pela cidade e UF para maior precisão, depois só pela cidade
+            const queryParams = [`${cidade},${uf},BR`, `${cidade},BR`, cidade]; 
+            let weatherData = null;
+
+            for (const param of queryParams) {
+                try {
+                    const response = await fetch(`https://api.openweathermap.org/data/2.5/weather?q=${encodeURIComponent(param)}&appid=${OPENWEATHERMAP_API_KEY}&units=metric&lang=pt_br`);
+                    if (response.ok) {
+                        weatherData = await response.json();
+                        if (weatherData && weatherData.main && weatherData.weather) {
+                            break; // Dados válidos encontrados, sair do loop
+                        } else {
+                            weatherData = null; // Resposta OK mas dados inválidos
+                        }
+                    }
+                } catch (error) {
+                    console.warn(`Falha ao buscar clima para ${param}:`, error);
+                }
+            }
+            
+            if (weatherData) {
+                weatherTempEl.textContent = `${Math.round(weatherData.main.temp)}°C`;
+                weatherCityEl.textContent = weatherData.name; // Usa o nome retornado pela API para consistência
+                weatherDescriptionEl.textContent = weatherData.weather[0].description;
+                weatherIconEl.src = `https://openweathermap.org/img/wn/${weatherData.weather[0].icon}@2x.png`;
+                weatherIconEl.alt = weatherData.weather[0].description;
+                weatherWidget.style.display = 'flex';
+            } else {
+                console.error('Não foi possível obter dados do clima para', cidade);
+                weatherWidget.style.display = 'none';
+            }
+        }
+
         cadastroForm.addEventListener('submit', (event) => {
             event.preventDefault();
+            // ... (resto da sua lógica de submit do cadastroForm, sem alterações aqui) ...
             if (!nomeInput.value.trim()) {
                 displayMessage(cadastroMessage, 'Por favor, informe seu nome.', 'error'); return;
             }
+            // ... (manter todas as validações e lógica de salvar usuário)
             if (!isValidEmail(emailCadastroInput.value)) {
                 displayMessage(cadastroMessage, 'Por favor, informe um e-mail válido.', 'error'); return;
             }
-            if (cepInput && cepInput.value.replace(/\D/g, '').length !== 8) { // Verifica se cepInput existe
+            if (cepInput && cepInput.value.replace(/\D/g, '').length !== 8) {
                 displayMessage(cadastroMessage, 'Por favor, informe um CEP válido com 8 números.', 'error'); return;
             }
-            if (enderecoInput && !enderecoInput.value.trim()) { // Verifica se enderecoInput existe
+            if (enderecoInput && !enderecoInput.value.trim()) {
                 displayMessage(cadastroMessage, 'Endereço não encontrado. Verifique o CEP.', 'error'); return;
             }
             if (senhaCadastroInput.value.length < 6) {
@@ -66,8 +131,8 @@ document.addEventListener('DOMContentLoaded', () => {
             const novoUsuario = {
                 nome: nomeInput.value.trim(),
                 email: emailCadastroInput.value.trim(),
-                cep: cepInput ? cepInput.value.replace(/\D/g, '') : '', // Verifica se cepInput existe
-                endereco: enderecoInput ? enderecoInput.value.trim() : '', // Verifica se enderecoInput existe
+                cep: cepInput ? cepInput.value.replace(/\D/g, '') : '',
+                endereco: enderecoInput ? enderecoInput.value.trim() : '',
                 senha: senhaCadastroInput.value
             };
 
@@ -76,12 +141,14 @@ document.addEventListener('DOMContentLoaded', () => {
             displayMessage(cadastroMessage, 'Cadastro realizado com sucesso! Você já pode fazer o login.', 'success');
             cadastroForm.reset();
             if(enderecoInput) enderecoInput.value = '';
+            if(weatherWidget) weatherWidget.style.display = 'none'; // Esconde widget após submit
         });
     }
 
     // --- LÓGICA DA PÁGINA DE LOGIN ---
     const loginForm = document.getElementById('loginForm');
     if (loginForm) {
+        // ... (sua lógica de login existente, sem alterações aqui) ...
         const emailLoginInput = document.getElementById('txtEmail');
         const senhaLoginInput = document.getElementById('txtSenha');
         const loginMessage = document.getElementById('loginMessage');
@@ -115,6 +182,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const adminNav = document.getElementById('adminNav');
 
     if (menuToggle && adminNav) {
+        // ... (sua lógica de menu existente, sem alterações aqui) ...
         menuToggle.addEventListener('click', () => {
             adminNav.classList.toggle('active');
         });
@@ -122,10 +190,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const currentYearSpan = document.getElementById('currentYear');
     if (currentYearSpan) {
+        // ... (sua lógica de ano existente, sem alterações aqui) ...
         currentYearSpan.textContent = new Date().getFullYear();
     }
 
     if (adminNav) {
+        // ... (sua lógica de link ativo existente, sem alterações aqui) ...
         const currentPage = window.location.pathname.split("/").pop();
         if (currentPage) {
             const navLinks = adminNav.querySelectorAll('ul li a');
@@ -141,6 +211,8 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- LÓGICA PARA CADASTRO DE VOLUNTÁRIO (cadastro_voluntario.html) ---
     const formCadastroVoluntario = document.getElementById('formCadastroVoluntario');
     if (formCadastroVoluntario) {
+        // ... (sua lógica de cadastro de voluntário existente, sem alterações aqui) ...
+        // ... (a função buscarEnderecoViaCEPVoluntario também permanece como está) ...
         const voluntarioNomeInput = document.getElementById('voluntarioNome');
         const voluntarioEmailInput = document.getElementById('voluntarioEmail');
         const voluntarioCEPInput = document.getElementById('voluntarioCEP');
@@ -160,6 +232,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 e.target.value = cepFormatado;
 
                 if (cep.length === 8) {
+                    // Note: Esta é buscarEnderecoViaCEPVoluntario, não a nova fetchWeatherData
+                    // Se quiser clima aqui também, teria que adaptar ou chamar a fetchWeatherData.
+                    // Por ora, mantendo como estava no seu script original.
                     buscarEnderecoViaCEPVoluntario(cep, cadastroVoluntarioMessage, voluntarioEnderecoInput);
                 }
             });
@@ -215,6 +290,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     async function buscarEnderecoViaCEPVoluntario(cep, messageElement, enderecoElement) {
+        // ... (sua função buscarEnderecoViaCEPVoluntario existente, sem alterações) ...
         displayMessage(messageElement, 'Buscando CEP...', 'info');
         try {
             const response = await fetch(`https://viacep.com.br/ws/${cep}/json/`);
@@ -236,13 +312,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
     // --- LÓGICA PARA LISTA DE VOLUNTÁRIOS (lista_voluntarios.html) ---
+    // ESTA É A VERSÃO QUE TENTA USAR A UNSPLASH E INCLUI OS LOGS PARA DEPURAR A UNSPLASH
     const voluntariosContainer = document.getElementById('voluntariosContainer');
     const filtroNomeVoluntarioInput = document.getElementById('filtroNomeVoluntario');
     const btnLimparTodosVoluntarios = document.getElementById('btnLimparTodosVoluntarios');
-    const listaVoluntariosMessage = document.getElementById('listaVoluntariosMessage');
+    const listaVoluntariosMsgEl = document.getElementById('listaVoluntariosMessage'); // Renomeado para evitar conflito com a função displayMessage
 
     if (voluntariosContainer) {
-        // ****** INÍCIO DA FUNÇÃO RENDERVOLUNTARIOS AJUSTADA ******
         function renderVoluntarios(voluntariosArray) {
             voluntariosContainer.innerHTML = ''; 
 
@@ -257,18 +333,14 @@ document.addEventListener('DOMContentLoaded', () => {
             voluntariosArray.forEach(voluntario => {
                 const card = document.createElement('div');
                 card.className = 'voluntario-card';
-
                 const sigId = String(voluntario.id || Date.now());
-
-                const primaryKeywords = "person,user,profile";
+                const primaryKeywords = "person,user,profile"; // Palavras-chave que você quer usar
                 const fotoUrl = `https://source.unsplash.com/160x160/?${primaryKeywords}&sig=${sigId}`;
-                
                 const fallbackKeywords = "abstract,gradient,pattern";
                 const fallbackFotoUrl = `https://source.unsplash.com/160x160/?${fallbackKeywords}&sig=fallback_${sigId}`;
 
-                // Logs para depuração
                 console.log(`Renderizando card para: ${voluntario.nome} (ID: ${voluntario.id})`);
-                console.log(`Tentando URL principal: ${fotoUrl}`);
+                console.log(`Tentando URL principal da Unsplash: ${fotoUrl}`);
 
                 card.innerHTML = `
                     <img src="${fotoUrl}" 
@@ -283,20 +355,16 @@ document.addEventListener('DOMContentLoaded', () => {
                         <i class="fas fa-trash"></i> Excluir
                     </button>
                 `;
-                
                 voluntariosContainer.appendChild(card);
             });
         }
-        // ****** FIM DA FUNÇÃO RENDERVOLUNTARIOS AJUSTADA ******
 
         function loadAndRenderVoluntarios() {
             const voluntariosDB = JSON.parse(localStorage.getItem('voluntariosDB')) || [];
             const filtroTexto = filtroNomeVoluntarioInput ? filtroNomeVoluntarioInput.value.toLowerCase() : "";
-
-            const voluntariosFiltrados = voluntariosDB.filter(voluntario => {
-                return voluntario.nome.toLowerCase().includes(filtroTexto);
-            });
-            
+            const voluntariosFiltrados = voluntariosDB.filter(voluntario => 
+                voluntario.nome.toLowerCase().includes(filtroTexto)
+            );
             renderVoluntarios(voluntariosFiltrados);
         }
 
@@ -314,10 +382,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     let voluntariosDB = JSON.parse(localStorage.getItem('voluntariosDB')) || [];
                     voluntariosDB = voluntariosDB.filter(v => v.id !== voluntarioId);
                     localStorage.setItem('voluntariosDB', JSON.stringify(voluntariosDB));
-                    if(typeof displayMessage === 'function' && listaVoluntariosMessage) {
-                        displayMessage(listaVoluntariosMessage, 'Voluntário excluído com sucesso.', 'success');
-                    } else {
-                        console.log('Voluntário excluído com sucesso.');
+                    if(typeof displayMessage === 'function' && listaVoluntariosMsgEl) {
+                        displayMessage(listaVoluntariosMsgEl, 'Voluntário excluído com sucesso.', 'success');
                     }
                     loadAndRenderVoluntarios();
                 }
@@ -328,19 +394,15 @@ document.addEventListener('DOMContentLoaded', () => {
             btnLimparTodosVoluntarios.addEventListener('click', () => {
                 const voluntariosDB = JSON.parse(localStorage.getItem('voluntariosDB')) || [];
                 if (voluntariosDB.length === 0) {
-                     if(typeof displayMessage === 'function' && listaVoluntariosMessage) {
-                        displayMessage(listaVoluntariosMessage, 'Não há voluntários para limpar.', 'info');
-                     } else {
-                        console.log('Não há voluntários para limpar.');
+                     if(typeof displayMessage === 'function' && listaVoluntariosMsgEl) {
+                        displayMessage(listaVoluntariosMsgEl, 'Não há voluntários para limpar.', 'info');
                      }
                     return;
                 }
                 if (confirm('ATENÇÃO: Isso apagará TODOS os voluntários cadastrados. Deseja continuar?')) {
                     localStorage.removeItem('voluntariosDB');
-                     if(typeof displayMessage === 'function' && listaVoluntariosMessage) {
-                        displayMessage(listaVoluntariosMessage, 'Todos os voluntários foram removidos.', 'success');
-                     } else {
-                        console.log('Todos os voluntários foram removidos.');
+                     if(typeof displayMessage === 'function' && listaVoluntariosMsgEl) {
+                        displayMessage(listaVoluntariosMsgEl, 'Todos os voluntários foram removidos.', 'success');
                      }
                     loadAndRenderVoluntarios();
                 }
@@ -348,12 +410,38 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     } // Fim do if (voluntariosContainer)
 
+    // --- LÓGICA DE INATIVIDADE PARA ÁREA ADMIN ---
+    const adminWrapperElement = document.querySelector('.admin-wrapper'); 
+
+    if (adminWrapperElement && (window.location.pathname.includes('admin.html') || 
+        window.location.pathname.includes('cadastro_voluntario.html') ||
+        window.location.pathname.includes('lista_voluntarios.html'))) {
+
+        let inactivityTimer;
+        const INACTIVITY_TIMEOUT_MS = 5 * 60 * 1000; 
+
+        const logoutUserPorInatividade = () => {
+            localStorage.removeItem('usuarioLogado'); 
+            alert("Você foi desconectado por inatividade. Por favor, faça o login novamente.");
+            window.location.href = 'login.html'; // Corrigido para login.html
+        };
+
+        const resetInactivityTimer = () => {
+            clearTimeout(inactivityTimer);
+            inactivityTimer = setTimeout(logoutUserPorInatividade, INACTIVITY_TIMEOUT_MS);
+        };
+
+        const activityEvents = ['mousemove', 'mousedown', 'keypress', 'scroll', 'touchstart', 'click'];
+        activityEvents.forEach(event => {
+            document.addEventListener(event, resetInactivityTimer, true); 
+        });
+
+        resetInactivityTimer(); 
+        console.log("Monitor de inatividade iniciado para páginas admin.");
+    }
+
 }); // Fim do DOMContentLoaded
 
-
-// As funções isValidEmail e displayMessage devem estar definidas fora deste DOMContentLoaded
-// ou no início dele para serem acessíveis globalmente dentro do escopo do DOMContentLoaded.
-// No seu código original, elas estão no final, o que é funcional.
 
 function isValidEmail(email) {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -362,11 +450,11 @@ function isValidEmail(email) {
 
 function displayMessage(element, message, type = 'error') {
     if (!element) {
-        console.warn("Elemento de mensagem não encontrado para a mensagem:", message);
+        console.warn("Elemento de mensagem não encontrado para a mensagem:", message, "(Elemento era:", element, ")");
         return;
     }
     element.textContent = message;
-    element.className = `message ${type}`;
+    element.className = `message ${type}`; // Garante que sempre comece com 'message'
     if (message) {
         element.style.display = 'block';
         if (type === 'success' || type === 'info') {
@@ -380,40 +468,4 @@ function displayMessage(element, message, type = 'error') {
     } else {
         element.style.display = 'none';
     }
-}
-
-// --- LÓGICA DE INATIVIDADE PARA ÁREA ADMIN ---
-const adminWrapperElement = document.querySelector('.admin-wrapper'); // Elemento presente nas páginas admin
-
-if (adminWrapperElement && window.location.pathname.includes('admin.html') || 
-    window.location.pathname.includes('cadastro_voluntario.html') ||
-    window.location.pathname.includes('lista_voluntarios.html')) {
-
-    let inactivityTimer;
-    const INACTIVITY_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutos em milissegundos
-
-    const logoutUserPorInatividade = () => {
-        // Limpa dados sensíveis do usuário logado (se houver)
-        localStorage.removeItem('usuarioLogado'); 
-        // Opcional: localStorage.removeItem('voluntariosDB'); se quiser limpar tudo ao deslogar por inatividade
-        
-        alert("Você foi desconectado por inatividade. Por favor, faça o login novamente.");
-        window.location.href = 'index.html';
-    };
-
-    const resetInactivityTimer = () => {
-        clearTimeout(inactivityTimer);
-        inactivityTimer = setTimeout(logoutUserPorInatividade, INACTIVITY_TIMEOUT_MS);
-        // console.log("Timer de inatividade resetado/iniciado."); // Para depuração
-    };
-
-    // Eventos que resetam o timer
-    const activityEvents = ['mousemove', 'mousedown', 'keypress', 'scroll', 'touchstart', 'click'];
-    activityEvents.forEach(event => {
-        document.addEventListener(event, resetInactivityTimer, true); // Use 'true' para capturing phase
-    });
-
-    // Inicia o timer quando a página admin é carregada
-    resetInactivityTimer(); 
-    console.log("Monitor de inatividade iniciado para páginas admin.");
 }
